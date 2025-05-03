@@ -3,3 +3,4 @@ context.md
 .DS_Store
 __pycache__/
 final.ipynb
+.venv
