@@ -69,12 +69,6 @@ python main.py
 
 The API will be available at `http://localhost:8000`.
 
-For development mode with auto-reload:
-
-```bash
-uvicorn main:app --reload
-```
-
 ## API Endpoints
 
 ### Root Endpoint
