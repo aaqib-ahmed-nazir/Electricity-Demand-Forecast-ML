@@ -1,0 +1,1 @@
+{"weights": [0.7, 0.3], "models": ["xgboost", "lstm"]}
