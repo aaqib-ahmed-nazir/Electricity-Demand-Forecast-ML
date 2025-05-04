@@ -1,1 +1,5 @@
-{"weights": [0.7, 0.3], "models": ["xgboost", "lstm"]}
+{
+  "approach": "stacking",
+  "models": ["xgboost", "lstm"],
+  "weights": [0.7, 0.3]
+}

@@ -4,3 +4,4 @@ context.md
 __pycache__/
 final.ipynb
 .venv
+.env

@@ -1,0 +1,103 @@
+{
+    "timestamp": "2025-05-04_22-37-17",
+    "dataset": "./dataset/processed/samples/sample_10000_clean_merged_data.csv",
+    "dataset_size": 10000,
+    "train_size": 8000,
+    "test_size": 2000,
+    "features": [
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "month_sin",
+        "month_cos",
+        "dayofweek_sin",
+        "dayofweek_cos",
+        "is_weekend",
+        "day_part_0",
+        "day_part_1",
+        "day_part_2",
+        "day_part_3",
+        "is_holiday",
+        "is_day_before_holiday",
+        "is_day_after_holiday",
+        "fourier_sin_24_1",
+        "fourier_cos_24_1",
+        "fourier_sin_24_2",
+        "fourier_cos_24_2",
+        "fourier_sin_24_3",
+        "fourier_cos_24_3",
+        "fourier_sin_168_1",
+        "fourier_cos_168_1",
+        "fourier_sin_168_2",
+        "fourier_cos_168_2",
+        "fourier_sin_168_3",
+        "fourier_cos_168_3",
+        "fourier_sin_8760_1",
+        "fourier_cos_8760_1",
+        "fourier_sin_8760_2",
+        "fourier_cos_8760_2",
+        "fourier_sin_8760_3",
+        "fourier_cos_8760_3",
+        "temperature_scaled",
+        "temperature_squared",
+        "temperature_cubed",
+        "temperature_binned",
+        "humidity_scaled",
+        "humidity_squared",
+        "humidity_cubed",
+        "humidity_binned",
+        "temperature_humidity_interaction",
+        "demand_lag_24h",
+        "demand_lag_48h",
+        "demand_lag_168h",
+        "demand_rolling_mean_24h",
+        "demand_rolling_max_24h",
+        "demand_rolling_min_24h",
+        "demand_rolling_std_24h",
+        "demand_rolling_mean_7d",
+        "demand_rolling_std_7d",
+        "demand_ewm_24h",
+        "demand_ewm_7d",
+        "demand_diff_1d",
+        "demand_diff_1w",
+        "demand_pct_change_1d",
+        "demand_pct_change_1w",
+        "is_anomaly"
+    ],
+    "metrics": {
+        "naive": {
+            "mae": 5407.1193,
+            "rmse": 6715.346700467422,
+            "mape": 141.70443400773624,
+            "r2": -1.0114605332144149
+        },
+        "xgboost": {
+            "mae": 183.1318261985279,
+            "rmse": 316.93802121217726,
+            "mape": 3.1830479662043323,
+            "r2": 0.9955060553074605
+        },
+        "lstm": {
+            "mae": 4095.0199289718817,
+            "rmse": 4751.438677397243,
+            "mape": 115.92713407232071,
+            "r2": -0.0033929166676276434
+        },
+        "ensemble": {
+            "mae": 186.07168603222442,
+            "rmse": 314.57204204765685,
+            "mape": 3.3660138875267287,
+            "r2": 0.9955729005079678
+        }
+    },
+    "best_model": {
+        "name": "xgboost",
+        "metrics": {
+            "mae": 183.1318261985279,
+            "rmse": 316.93802121217726,
+            "mape": 3.1830479662043323,
+            "r2": 0.9955060553074605
+        }
+    }
+}
