@@ -36,6 +36,17 @@ A machine learning-powered API for forecasting electricity demand, performing cl
 ## Installation
 
 1. Clone the repository
+```bash
+git clone https://github.com/aaqib-ahmed-nazir/data_mining_project.git
+cd data_mining_project
+```
+2. Create a virtual environment (optional but recommended):
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+```
+
 2. Install required packages:
 
 ```bash
