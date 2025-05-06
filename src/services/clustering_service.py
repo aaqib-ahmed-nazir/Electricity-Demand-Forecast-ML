@@ -56,7 +56,6 @@ class ClusteringService:
                 ]
             })
         
-        # Calculate explained variance
         explained_variance = pca.explained_variance_ratio_.tolist()
         
         return {

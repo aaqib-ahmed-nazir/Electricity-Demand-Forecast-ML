@@ -64,15 +64,12 @@ def preprocess_data(df, start_date=None, end_date=None):
                     return pd.DataFrame(), []
             except Exception as e:
                 print(f"Error parsing date range: {e}")
-                # Continue with full dataset if date parsing fails
         
-        # Extract temporal features
         df['hour'] = df['datetime'].dt.hour
         df['dayofweek'] = df['datetime'].dt.dayofweek
         df['day'] = df['datetime'].dt.day
         df['month'] = df['datetime'].dt.month
         
-        # Create cyclical features for time variables
         df['hour_sin'] = np.sin(2 * np.pi * df['hour']/24)
         df['hour_cos'] = np.cos(2 * np.pi * df['hour']/24)
         df['day_sin'] = np.sin(2 * np.pi * df['day']/31)
@@ -80,10 +77,8 @@ def preprocess_data(df, start_date=None, end_date=None):
         df['month_sin'] = np.sin(2 * np.pi * df['month']/12)
         df['month_cos'] = np.cos(2 * np.pi * df['month']/12)
         
-        # Create weekend indicator
         df['is_weekend'] = df['dayofweek'].isin([5, 6]).astype(int)
         
-        # Add temperature binning feature
         if 'temperature' in df.columns:
             bins = [0, 40, 50, 60, 70, 80, 90, 100, 120]
             df['temperature_binned'] = pd.cut(df['temperature'], bins=bins, labels=False)
@@ -92,27 +87,23 @@ def preprocess_data(df, start_date=None, end_date=None):
         else:
             df['temperature_binned'] = 0
         
-        # Add demand change features if demand column exists
         if 'demand' in df.columns:
             df = df.sort_values('datetime')
             df['demand_diff_1d'] = df['demand'].diff(24)
             df['demand_pct_change_1d'] = df['demand'].pct_change(24)
             df['demand_diff_1w'] = df['demand'].diff(168)
             df['demand_pct_change_1w'] = df['demand'].pct_change(168)
-            # Fix for pandas FutureWarning - avoid inplace fillna on a copy
             for col in ['demand_diff_1d', 'demand_pct_change_1d', 'demand_diff_1w', 'demand_pct_change_1w']:
                 df[col] = df[col].fillna(0)
         else:
             for col in ['demand_diff_1d', 'demand_pct_change_1d', 'demand_diff_1w', 'demand_pct_change_1w']:
                 df[col] = 0
         
-        # Scale weather features
         weather_features = ['temperature', 'humidity', 'windSpeed', 'pressure', 
                            'precipIntensity', 'precipProbability']
         
         scaler = MinMaxScaler()
         
-        # Scale demand - this is needed for the XGBoost model
         if 'demand' in df.columns:
             if df['demand'].isna().any():
                 print(f"Warning: NaN values found in demand, filling with mean")
@@ -126,7 +117,6 @@ def preprocess_data(df, start_date=None, end_date=None):
                     df[feature] = df[feature].fillna(df[feature].mean())
                 df[f'{feature}_scaled'] = scaler.fit_transform(df[[feature]])
         
-        # Define feature columns
         feature_columns = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos', 
                           'month_sin', 'month_cos', 'is_weekend',
                           'temperature_binned', 'demand_diff_1d', 'demand_pct_change_1d',

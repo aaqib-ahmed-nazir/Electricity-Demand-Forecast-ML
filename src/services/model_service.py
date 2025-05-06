@@ -86,15 +86,11 @@ class ModelService:
             raise HTTPException(status_code=500, detail="XGBoost model not loaded")
         
         try:
-            # Get the expected feature names from the model
             expected_features = self.models["xgboost"].feature_names
             
-            # Check if we need to reorder or add missing features
             if isinstance(X_test, pd.DataFrame):
-                # Get current feature names
                 current_features = list(X_test.columns)
                 
-                # Check for missing features
                 missing_features = [f for f in expected_features if f not in current_features]
                 if missing_features:
                     print(f"Warning: Missing features: {missing_features}")
@@ -102,16 +98,13 @@ class ModelService:
                     for feature in missing_features:
                         X_test[feature] = 0.0
                 
-                # Reorder columns to match expected features
                 X_test = X_test[expected_features]
             
-            # Convert to DMatrix with feature names explicitly provided
             dtest = xgb.DMatrix(X_test, feature_names=expected_features)
             
             # Make predictions
             predictions = self.models["xgboost"].predict(dtest)
             
-            # Check for NaN values in predictions
             if np.isnan(predictions).any():
                 print("WARNING: NaN values detected in predictions. Replacing with zeros.")
                 predictions = np.nan_to_num(predictions)
@@ -121,20 +114,15 @@ class ModelService:
             print(f"Error making XGBoost predictions: {e}")
             print(traceback.format_exc())
             
-            # If the error is due to feature mismatch, try a fallback approach
             if "feature_names mismatch" in str(e):
                 try:
                     print("Attempting fallback prediction without feature names...")
-                    # Create DMatrix without feature names
                     dtest = xgb.DMatrix(X_test)
                     
-                    # Set feature names to None to bypass the check
                     self.models["xgboost"].feature_names = None
                     
-                    # Make predictions
                     predictions = self.models["xgboost"].predict(dtest)
                     
-                    # Check for NaN values in predictions
                     if np.isnan(predictions).any():
                         print("WARNING: NaN values detected in predictions. Replacing with zeros.")
                         predictions = np.nan_to_num(predictions)
@@ -187,7 +175,6 @@ class ModelService:
             # Convert to numpy array if it's not already
             predictions_array = np.array(predictions)
             
-            # Check for NaN values
             if np.isnan(predictions_array).any():
                 print("WARNING: NaN values detected in predictions for confidence bounds. Replacing with zeros.")
                 predictions_array = np.nan_to_num(predictions_array)

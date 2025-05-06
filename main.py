@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.routes import prediction_routes, clustering_routes, chat_routes
 
-# Setup FastAPI app
 app = FastAPI(
     title="Electricity Demand Forecasting API",
     description="API for predicting electricity demand using machine learning models",
