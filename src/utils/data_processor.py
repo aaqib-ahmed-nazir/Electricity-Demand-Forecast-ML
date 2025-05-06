@@ -83,6 +83,29 @@ def preprocess_data(df, start_date=None, end_date=None):
         # Create weekend indicator
         df['is_weekend'] = df['dayofweek'].isin([5, 6]).astype(int)
         
+        # Add temperature binning feature
+        if 'temperature' in df.columns:
+            bins = [0, 40, 50, 60, 70, 80, 90, 100, 120]
+            df['temperature_binned'] = pd.cut(df['temperature'], bins=bins, labels=False)
+            df['temperature_binned'] = df['temperature_binned'].astype(float)
+            df['temperature_binned'] = df['temperature_binned'].fillna(0)
+        else:
+            df['temperature_binned'] = 0
+        
+        # Add demand change features if demand column exists
+        if 'demand' in df.columns:
+            df = df.sort_values('datetime')
+            df['demand_diff_1d'] = df['demand'].diff(24)
+            df['demand_pct_change_1d'] = df['demand'].pct_change(24)
+            df['demand_diff_1w'] = df['demand'].diff(168)
+            df['demand_pct_change_1w'] = df['demand'].pct_change(168)
+            # Fix for pandas FutureWarning - avoid inplace fillna on a copy
+            for col in ['demand_diff_1d', 'demand_pct_change_1d', 'demand_diff_1w', 'demand_pct_change_1w']:
+                df[col] = df[col].fillna(0)
+        else:
+            for col in ['demand_diff_1d', 'demand_pct_change_1d', 'demand_diff_1w', 'demand_pct_change_1w']:
+                df[col] = 0
+        
         # Scale weather features
         weather_features = ['temperature', 'humidity', 'windSpeed', 'pressure', 
                            'precipIntensity', 'precipProbability']
@@ -91,7 +114,6 @@ def preprocess_data(df, start_date=None, end_date=None):
         
         # Scale demand - this is needed for the XGBoost model
         if 'demand' in df.columns:
-            # Handle NaN values
             if df['demand'].isna().any():
                 print(f"Warning: NaN values found in demand, filling with mean")
                 df['demand'] = df['demand'].fillna(df['demand'].mean())
@@ -99,7 +121,6 @@ def preprocess_data(df, start_date=None, end_date=None):
         
         for feature in weather_features:
             if feature in df.columns:
-                # Handle NaN values
                 if df[feature].isna().any():
                     print(f"Warning: NaN values found in {feature}, filling with mean")
                     df[feature] = df[feature].fillna(df[feature].mean())
@@ -107,14 +128,14 @@ def preprocess_data(df, start_date=None, end_date=None):
         
         # Define feature columns
         feature_columns = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos', 
-                          'month_sin', 'month_cos', 'is_weekend']
+                          'month_sin', 'month_cos', 'is_weekend',
+                          'temperature_binned', 'demand_diff_1d', 'demand_pct_change_1d',
+                          'demand_diff_1w', 'demand_pct_change_1w']
                           
-        # Add scaled weather features to feature columns
         for feature in weather_features:
             if f'{feature}_scaled' in df.columns:
                 feature_columns.append(f'{feature}_scaled')
         
-        # Add demand_scaled to feature columns if it exists
         if 'demand_scaled' in df.columns:
             feature_columns.append('demand_scaled')
         
@@ -146,47 +167,40 @@ def create_features_targets(data, target_column='demand', lag_hours=24, window_s
             print(f"Error: Target column '{target_column}' not found in data")
             return pd.DataFrame(), pd.Series()
             
-        # Make a copy to avoid modifying the original
         data = data.copy()
         
-        # Handle NaN values in target
         if data[target_column].isna().any():
             print(f"Warning: NaN values found in target column '{target_column}', filling with mean")
             data[target_column] = data[target_column].fillna(data[target_column].mean())
         
-        # Check if we have enough data for the requested window size
         available_hours = len(data)
         required_hours = lag_hours + window_size
         
         if available_hours < required_hours:
-            # If not enough data, adjust the window size to what we have
             print(f"Warning: Not enough data for requested window size. Have {available_hours} hours, need {required_hours} hours.")
             print(f"Adjusting window size from {window_size} to {max(24, available_hours - lag_hours - 24)}")
-            window_size = max(24, available_hours - lag_hours - 24)  # Use at least 24 hours, but not more than we have
+            window_size = max(24, available_hours - lag_hours - 24)
         
         lagged_features = pd.DataFrame()
         
-        # Add lagged target variables (demand from previous hours)
-        # Step size is now minimum to ensure we have enough features
-        lag_step = 24  # Default step is one day
+        lag_step = 24
         if window_size < 72:
-            lag_step = 12  # If window is small, use 12 hour steps
+            lag_step = 12
         if window_size < 48:
-            lag_step = 6   # If window is very small, use 6 hour steps
+            lag_step = 6
         
         for lag in range(lag_hours, lag_hours + window_size, lag_step):
             lagged_features[f'demand_lag_{lag}'] = data[target_column].shift(lag)
         
-        # Add original features
         for col in data.columns:
             if col.endswith('_scaled') or col in ['hour_sin', 'hour_cos', 'day_sin', 'day_cos', 
-                                                 'month_sin', 'month_cos', 'is_weekend']:
+                                                 'month_sin', 'month_cos', 'is_weekend',
+                                                 'temperature_binned', 'demand_diff_1d', 'demand_pct_change_1d',
+                                                 'demand_diff_1w', 'demand_pct_change_1w']:
                 lagged_features[col] = data[col]
         
-        # Target is the original demand
         targets = data[target_column]
         
-        # Remove rows with NaN values due to lagging
         valid_idx = ~lagged_features.isna().any(axis=1)
         
         if not valid_idx.any():

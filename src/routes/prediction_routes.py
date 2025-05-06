@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 import xgboost as xgb
 import pandas as pd
 import traceback
+from datetime import datetime, timedelta
 
 from src.models.schemas import PredictionRequest
 from src.services.model_service import ModelService
@@ -21,12 +22,44 @@ DATA_DIR = os.path.join(BASE_DIR, "dataset/processed/samples")
 # Initialize model service
 model_service = ModelService(MODEL_DIR)
 
+# Define data availability constants
+DATA_START_DATE = "2018-07-01"  # Earliest date in our dataset
+DATA_END_DATE = "2020-05-31"    # Latest date in our dataset
+
 @router.post("")  # This will match /predict
 async def predict(request: PredictionRequest):
     """
     Predict electricity demand for the given parameters.
     """
     try:
+        # Validate date range is within available data
+        start_date = pd.to_datetime(request.start_date)
+        end_date = pd.to_datetime(request.end_date)
+        data_start = pd.to_datetime(DATA_START_DATE)
+        data_end = pd.to_datetime(DATA_END_DATE)
+        
+        # If requested dates are outside our dataset range, provide a helpful error
+        if end_date < data_start or start_date > data_end:
+            return {
+                "error": "No data available for the selected date range",
+                "available_data_range": f"{DATA_START_DATE} to {DATA_END_DATE}",
+                "requested_range": f"{request.start_date} to {request.end_date}",
+                "status": "error"
+            }
+        
+        # If dates are partially outside range, adjust them and warn
+        date_adjusted = False
+        original_start = start_date
+        original_end = end_date
+        
+        if start_date < data_start:
+            start_date = data_start
+            date_adjusted = True
+            
+        if end_date > data_end:
+            end_date = data_end
+            date_adjusted = True
+        
         # Load dataset
         data_path = os.path.join(DATA_DIR, "sample_10000_clean_merged_data.csv")
         df = load_dataset(data_path)
@@ -35,22 +68,45 @@ async def predict(request: PredictionRequest):
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Preprocess data
-        processed_df, feature_columns = preprocess_data(df, request.start_date, request.end_date)
+        processed_df, feature_columns = preprocess_data(df, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         if processed_df.empty:
-            raise HTTPException(status_code=400, detail="No data available for the selected date range")
+            return {
+                "error": "No data available for the selected date range",
+                "available_data_range": f"{DATA_START_DATE} to {DATA_END_DATE}",
+                "requested_range": f"{request.start_date} to {request.end_date}",
+                "suggestion": "Try selecting a different date range or city",
+                "status": "error"
+            }
         
         # Get predictions based on the requested model
         if request.model == "xgboost":
-            return predict_xgboost(processed_df, feature_columns, request.look_back_window)
+            result = predict_xgboost(processed_df, feature_columns, request.look_back_window)
         else:  # ensemble (defaulting to xgboost if ensemble is not available)
-            return predict_ensemble(processed_df, feature_columns, request.look_back_window)
+            result = predict_ensemble(processed_df, feature_columns, request.look_back_window)
+            
+        # Add a warning if dates were adjusted
+        if date_adjusted:
+            result["date_range_adjusted"] = True
+            result["original_requested_range"] = f"{original_start.strftime('%Y-%m-%d')} to {original_end.strftime('%Y-%m-%d')}"
+            result["adjusted_range"] = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+            result["warning"] = "The requested date range was adjusted to match available data"
+        
+        result["status"] = "success"
+        return result
             
     except Exception as e:
         # Log the full error for debugging
         print(f"Prediction error: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+        
+        # Return a structured error response rather than throwing an exception
+        return {
+            "error": f"Prediction error: {str(e)}",
+            "status": "error",
+            "detail": "There was an error processing your prediction request",
+            "available_data_range": f"{DATA_START_DATE} to {DATA_END_DATE}"
+        }
 
 def predict_xgboost(df, feature_columns, look_back_window):
     """
@@ -72,7 +128,8 @@ def predict_xgboost(df, feature_columns, look_back_window):
             "forecast": predictions.tolist(),
             "actual": y.values.tolist() if y is not None and not y.empty else [],
             "timestamps": df['datetime'].iloc[-len(predictions):].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(),
-            "confidence_bounds": model_service.create_confidence_bounds(predictions, "xgboost")
+            "confidence_bounds": model_service.create_confidence_bounds(predictions, "xgboost"),
+            "data_points": len(predictions)
         }
         
         return result
@@ -112,7 +169,8 @@ def predict_ensemble(df, feature_columns, look_back_window):
                 "xgboost": xgb_preds.tolist(),
                 "weight_adjustment": f"Using adjusted weight of {adjusted_weight:.2f} for XGBoost predictions to simulate ensemble"
             },
-            "note": "LSTM model is not available with Python 3.12, so ensemble is simulated using XGBoost with adjusted weights"
+            "note": "LSTM model is not available with Python 3.12, so ensemble is simulated using XGBoost with adjusted weights",
+            "data_points": len(ensemble_preds)
         }
         
         return result

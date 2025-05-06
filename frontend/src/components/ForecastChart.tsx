@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import { ForecastDataPoint } from "@/types";
 import { 
@@ -44,13 +43,13 @@ const ForecastChart = ({ data }: ForecastChartProps) => {
           <div className="flex flex-col gap-1 mt-2">
             {payload[0]?.value !== undefined && (
               <p className="text-xs flex items-center">
-                <span className="h-2 w-2 bg-chart-blue rounded-full mr-2"></span>
+                <span className="h-2 w-2 bg-blue-600 rounded-full mr-2"></span>
                 Actual: {payload[0].value}
               </p>
             )}
             {payload[1]?.value !== undefined && (
               <p className="text-xs flex items-center">
-                <span className="h-2 w-2 bg-chart-purple rounded-full mr-2"></span>
+                <span className="h-2 w-2 bg-rose-600 rounded-full mr-2"></span>
                 Predicted: {payload[1].value}
               </p>
             )}
@@ -113,7 +112,7 @@ const ForecastChart = ({ data }: ForecastChartProps) => {
             dataKey="upper"
             stroke="transparent"
             fillOpacity={0.1}
-            fill="#8884d8"
+            fill="#9333ea"
             name="Upper Bound"
           />
           <Area
@@ -121,16 +120,17 @@ const ForecastChart = ({ data }: ForecastChartProps) => {
             dataKey="lower"
             stroke="transparent"
             fillOpacity={0.1}
-            fill="#8884d8"
+            fill="#9333ea"
             name="Lower Bound"
           />
           
-          {/* Actual and Predicted Lines */}
+          {/* Actual and Predicted Lines - with more contrasting colors */}
           <Line 
             type="monotone" 
             dataKey="actual" 
-            stroke="#3b82f6" 
-            strokeWidth={2}
+            stroke="#2563eb" 
+            strokeWidth={2.5}
+            dot={{ fill: '#2563eb', r: 3 }}
             activeDot={{ r: 6 }} 
             name="Actual"
             isAnimationActive={true}
@@ -138,8 +138,10 @@ const ForecastChart = ({ data }: ForecastChartProps) => {
           <Line 
             type="monotone" 
             dataKey="predicted" 
-            stroke="#8b5cf6" 
+            stroke="#e11d48" 
             strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={{ fill: '#e11d48', r: 3 }}
             activeDot={{ r: 4 }}
             name="Predicted"
             isAnimationActive={true}
