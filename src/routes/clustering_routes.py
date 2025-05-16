@@ -1,6 +1,3 @@
-"""
-API routes for clustering analysis.
-"""
 import os
 from fastapi import APIRouter, HTTPException
 import traceback
@@ -29,28 +26,22 @@ async def cluster_data(request: ClusteringRequest):
         if df is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
         
-        # Preprocess data
         processed_df, _ = preprocess_data(df)
         
         if processed_df.empty:
             raise HTTPException(status_code=400, detail="No data available for processing")
         
-        # Select features for clustering
         if request.features:
             cluster_features = [f for f in request.features if f in processed_df.columns]
             if not cluster_features:
                 raise HTTPException(status_code=400, detail="None of the specified features exist in the dataset")
         else:
-            # Default features for clustering
             cluster_features = ['demand', 'temperature_scaled', 'hour_sin', 'hour_cos']
-            # Verify that all default features exist in the dataset
             missing_features = [f for f in cluster_features if f not in processed_df.columns]
             if missing_features:
-                # Use alternative features if some are missing
                 cluster_features = [f for f in cluster_features if f in processed_df.columns]
                 if 'demand' not in processed_df.columns:
                     raise HTTPException(status_code=400, detail="Required feature 'demand' is missing from the dataset")
-                # Add some temporal features if we're missing weather features
                 if len(cluster_features) < 3:
                     for feature in ['day_sin', 'day_cos', 'month_sin', 'month_cos', 'is_weekend']:
                         if feature in processed_df.columns and feature not in cluster_features:
@@ -68,7 +59,6 @@ async def cluster_data(request: ClusteringRequest):
         return clustering_result
         
     except Exception as e:
-        # Log the full error for debugging
         print(f"Clustering error: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Clustering error: {str(e)}")

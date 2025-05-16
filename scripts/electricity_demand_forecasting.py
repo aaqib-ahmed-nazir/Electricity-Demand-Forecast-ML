@@ -14,6 +14,9 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional, BatchNo
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam
 import joblib
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 import json
 from datetime import datetime, timedelta
 import warnings
@@ -128,53 +131,39 @@ class ElectricityDemandForecaster:
         self.df.loc[:, 'day_part_2'] = ((self.df['hour'] >= 17) & (self.df['hour'] < 22)).astype(int)  # Evening
         self.df.loc[:, 'day_part_3'] = ((self.df['hour'] >= 22) | (self.df['hour'] < 5)).astype(int)   # Night
         
-        # Add holiday features if available
         if 'is_holiday' in self.df.columns:
-            # Create lag and lead holiday indicators
             self.df.loc[:, 'is_day_before_holiday'] = self.df['is_holiday'].shift(-24).fillna(0)
             self.df.loc[:, 'is_day_after_holiday'] = self.df['is_holiday'].shift(24).fillna(0)
         else:
-            # Create placeholder holiday features
             self.df.loc[:, 'is_holiday'] = 0
             self.df.loc[:, 'is_day_before_holiday'] = 0
             self.df.loc[:, 'is_day_after_holiday'] = 0
         
-        # Scale weather features if available
         weather_features = ['temperature', 'humidity', 'wind_speed', 'precipitation', 'cloud_cover']
         available_weather_features = [f for f in weather_features if f in self.df.columns]
         
         for feature in available_weather_features:
-            # Handle missing values
             if self.df[feature].isna().any():
-                # Use more sophisticated imputation for weather data
-                # First, forward fill to use the most recent available value
                 self.df.loc[:, feature] = self.df[feature].fillna(method='ffill')
-                # Then, if there are still NaNs at the beginning, backfill
                 self.df.loc[:, feature] = self.df[feature].fillna(method='bfill')
-                # If there are still NaNs (unlikely), use median
                 self.df.loc[:, feature] = self.df[feature].fillna(self.df[feature].median())
             
-            # Create scaled versions
             scaler = MinMaxScaler()
             self.df.loc[:, f'{feature}_scaled'] = scaler.fit_transform(self.df[[feature]])
             
-            # Add polynomial features for non-linear relationships
             self.df.loc[:, f'{feature}_squared'] = self.df[f'{feature}_scaled'] ** 2
             self.df.loc[:, f'{feature}_cubed'] = self.df[f'{feature}_scaled'] ** 3
             
             self.df.loc[:, f'{feature}_binned'] = pd.qcut(self.df[feature], 5, labels=False, duplicates='drop')
         
-        # Create interaction features between weather variables
         for i, feat1 in enumerate(available_weather_features):
             for feat2 in available_weather_features[i+1:]:
                 self.df.loc[:, f'{feat1}_{feat2}_interaction'] = self.df[f'{feat1}_scaled'] * self.df[f'{feat2}_scaled']
         
-        # Add lag features for demand
         self.df.loc[:, 'demand_lag_24h'] = self.df['demand'].shift(24)  # Previous day, same hour
         self.df.loc[:, 'demand_lag_48h'] = self.df['demand'].shift(48)  # Two days ago, same hour
         self.df.loc[:, 'demand_lag_168h'] = self.df['demand'].shift(168)  # Previous week, same hour
         
-        # Add rolling statistics
         self.df.loc[:, 'demand_rolling_mean_24h'] = self.df['demand'].shift(1).rolling(window=24).mean()
         self.df.loc[:, 'demand_rolling_std_24h'] = self.df['demand'].shift(1).rolling(window=24).std()
         self.df.loc[:, 'demand_rolling_min_24h'] = self.df['demand'].shift(1).rolling(window=24).min()
@@ -183,19 +172,15 @@ class ElectricityDemandForecaster:
         self.df.loc[:, 'demand_rolling_mean_7d'] = self.df['demand'].shift(1).rolling(window=168).mean()
         self.df.loc[:, 'demand_rolling_std_7d'] = self.df['demand'].shift(1).rolling(window=168).std()
         
-        # Add exponentially weighted features
         self.df.loc[:, 'demand_ewm_24h'] = self.df['demand'].shift(1).ewm(span=24).mean()  # 1 day EWM
         self.df.loc[:, 'demand_ewm_7d'] = self.df['demand'].shift(1).ewm(span=168).mean()  # 7 day EWM
         
-        # Add demand difference features
         self.df.loc[:, 'demand_diff_1d'] = self.df['demand'] - self.df['demand_lag_24h']
         self.df.loc[:, 'demand_diff_1w'] = self.df['demand'] - self.df['demand_lag_168h']
         
-        # Add rate of change features
         self.df.loc[:, 'demand_pct_change_1d'] = self.df['demand'].pct_change(24).fillna(0)
         self.df.loc[:, 'demand_pct_change_1w'] = self.df['demand'].pct_change(168).fillna(0)
         
-        # Add Fourier features for capturing seasonality
         for period in [24, 168, 8760]:  # Daily, weekly, yearly
             for harmonic in range(1, 4):  # Multiple harmonics
                 self.df.loc[:, f'fourier_sin_{period}_{harmonic}'] = np.sin(2 * np.pi * harmonic * np.arange(len(self.df)) / period)
@@ -213,7 +198,6 @@ class ElectricityDemandForecaster:
             z_scores = np.abs((self.df['demand'] - self.df['demand'].mean()) / self.df['demand'].std())
             self.df.loc[:, 'is_anomaly'] = (z_scores > 3).astype(int)
         
-        # Define feature columns
         self.feature_columns = [
             'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 
             'month_sin', 'month_cos', 'dayofweek_sin', 'dayofweek_cos',
@@ -221,27 +205,22 @@ class ElectricityDemandForecaster:
             'is_holiday', 'is_day_before_holiday', 'is_day_after_holiday'
         ]
         
-        # Add Fourier features
         fourier_features = [col for col in self.df.columns if 'fourier_' in col]
         self.feature_columns.extend(fourier_features)
         
-        # Add city features if available
         if 'city' in self.df.columns:
             city_columns = [col for col in self.df.columns if col.startswith('city_')]
             self.feature_columns.extend(city_columns)
                               
-        # Add scaled and transformed weather features to feature columns
         for feature in available_weather_features:
             weather_derived_features = [
                 f'{feature}_scaled', f'{feature}_squared', f'{feature}_cubed', f'{feature}_binned'
             ]
             self.feature_columns.extend([f for f in weather_derived_features if f in self.df.columns])
         
-        # Add interaction features
         interaction_features = [col for col in self.df.columns if '_interaction' in col]
         self.feature_columns.extend(interaction_features)
         
-        # Add lag features
         lag_features = [
             'demand_lag_24h', 'demand_lag_48h', 'demand_lag_168h',
             'demand_rolling_mean_24h', 'demand_rolling_max_24h', 
@@ -272,8 +251,6 @@ class ElectricityDemandForecaster:
             raise ValueError("Data not preprocessed. Call preprocess_data() first.")
         
         print("\nSplitting data into training and testing sets...")
-        
-        # Use the last test_size proportion of the data for testing
         train_size = int(len(self.df) * (1 - test_size))
         self.train_df = self.df.iloc[:train_size].copy()
         self.test_df = self.df.iloc[train_size:].copy()
@@ -472,8 +449,8 @@ class ElectricityDemandForecaster:
             'reg_lambda': 1.0,
             'n_jobs': -1,
             'seed': 42,
-            'tree_method': 'hist',  # Faster algorithm
-            'max_bin': 256          # For histogram-based algorithm
+            'tree_method': 'hist',  
+            'max_bin': 256          
         }
         
         print("Training XGBoost model...")
@@ -580,18 +557,14 @@ class ElectricityDemandForecaster:
         """
         print("\nImplementing LSTM model...")
         
-        # Create a copy of the data for LSTM
         lstm_train_data = self.train_df[self.feature_columns + [self.target_column]].copy()
         lstm_test_data = self.test_df[self.feature_columns + [self.target_column]].copy()
         
-        # Replace any infinite values with NaN
         lstm_train_data = lstm_train_data.replace([np.inf, -np.inf], np.nan)
         lstm_test_data = lstm_test_data.replace([np.inf, -np.inf], np.nan)
         
-        # Fill NaN values with column medians (more robust than mean)
         for col in lstm_train_data.columns:
             if lstm_train_data[col].isna().any():
-                # Use proper pandas assignment to avoid SettingWithCopyWarning
                 col_median = lstm_train_data[col].median()
                 lstm_train_data.loc[:, col] = lstm_train_data[col].fillna(col_median)
                 lstm_test_data.loc[:, col] = lstm_test_data[col].fillna(col_median)
@@ -599,9 +572,8 @@ class ElectricityDemandForecaster:
         # Calculate correlation with target for feature selection
         correlations = lstm_train_data.corr()[self.target_column].abs().sort_values(ascending=False)
         
-        # Select top features by correlation (top 30 features)
-        num_top_features = min(30, len(correlations) - 1)  # Ensure we don't exceed available features
-        top_features = correlations.index.tolist()[:num_top_features+1]  # +1 to include target
+        num_top_features = min(30, len(correlations) - 1)  
+        top_features = correlations.index.tolist()[:num_top_features+1] 
         
         if self.target_column in top_features:
             top_features.remove(self.target_column)
@@ -655,11 +627,6 @@ class ElectricityDemandForecaster:
         print(f"LSTM training sequences shape: {X_train_seq.shape}")
         print(f"LSTM testing sequences shape: {X_test_seq.shape}")
         
-        # Build a simpler LSTM model to reduce training time
-        from tensorflow.keras.models import Model
-        from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization
-        from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
-
         # Input layer
         input_layer = Input(shape=(seq_length, X_train_seq.shape[2]))
         
@@ -1093,7 +1060,7 @@ class ElectricityDemandForecaster:
         print("\nVisualizing results...")
         
         # Set up the sample size and start point
-        sample_size = sample_days * 24  # Convert days to hours
+        sample_size = sample_days * 24  
         
         # Plot predictions for each model
         if 'naive' in self.predictions:
@@ -1154,31 +1121,22 @@ class ElectricityDemandForecaster:
         """
         print("Running complete electricity demand forecasting pipeline...")
         
-        # Step 1: Load data
         self.load_data()
         
-        # Step 2: Preprocess data
         self.preprocess_data()
         
-        # Step 3: Split data into train and test sets
         self.split_train_test()
         
-        # Step 4: Implement naive forecast
         self.implement_naive_forecast()
         
-        # Step 5: Implement XGBoost model
         self.implement_xgboost()
         
-        # Step 6: Implement LSTM model
         self.implement_lstm()
         
-        # Step 7: Create ensemble model
         self.create_ensemble()
         
-        # Step 8: Compare models
         self.compare_models()
         
-        # Step 9: Save models
         self.save_models()
         
         print("Forecasting pipeline completed successfully!")
@@ -1190,10 +1148,8 @@ def main():
     """
     data_path = "./dataset/processed/samples/sample_10000_clean_merged_data.csv"
     
-    # Create a forecaster instance
     forecaster = ElectricityDemandForecaster(data_path=data_path)
     
-    # Run the complete pipeline
     forecaster.run_pipeline()
 
 

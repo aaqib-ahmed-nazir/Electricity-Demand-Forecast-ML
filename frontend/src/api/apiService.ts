@@ -1,7 +1,18 @@
-
 import { ClusterPoint, ForecastDataPoint } from "@/types";
 
-const API_BASE_URL = "http://localhost:8000";
+// Dynamically get the backend URL - this works well when backend and frontend are on the same domain
+// If backend is on a different ngrok URL, replace this with the exact backend ngrok URL
+const getApiBaseUrl = () => {
+  // If running locally - use localhost
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:8000';
+  }
+  
+  // For ngrok - use the backend ngrok URL
+  return 'https://b3ec-2400-adc5-120-c600-d9ae-b945-cd70-8b6c.ngrok-free.app';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Interface for API responses
 interface ClusterResponse {

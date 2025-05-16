@@ -1,6 +1,3 @@
-"""
-API routes for Gemini chatbot integration.
-"""
 from fastapi import APIRouter, HTTPException
 from src.models.schemas import ChatRequest
 from src.services.chat_service import ChatService
@@ -13,7 +10,6 @@ load_dotenv()
 # Create router
 router = APIRouter(prefix="/chat", tags=["Chatbot"])
 
-# Get Gemini API key from environment variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set")

@@ -1,6 +1,3 @@
-"""
-API routes for electricity demand prediction.
-"""
 import os
 from fastapi import APIRouter, HTTPException
 import xgboost as xgb
@@ -23,10 +20,10 @@ DATA_DIR = os.path.join(BASE_DIR, "dataset/processed/samples")
 model_service = ModelService(MODEL_DIR)
 
 # Define data availability constants
-DATA_START_DATE = "2018-07-01"  # Earliest date in our dataset
-DATA_END_DATE = "2020-05-31"    # Latest date in our dataset
+DATA_START_DATE = "2018-07-01" 
+DATA_END_DATE = "2020-05-31"  
 
-@router.post("")  # This will match /predict
+@router.post("") 
 async def predict(request: PredictionRequest):
     """
     Predict electricity demand for the given parameters.
@@ -38,7 +35,6 @@ async def predict(request: PredictionRequest):
         data_start = pd.to_datetime(DATA_START_DATE)
         data_end = pd.to_datetime(DATA_END_DATE)
         
-        # If requested dates are outside our dataset range, provide a helpful error
         if end_date < data_start or start_date > data_end:
             return {
                 "error": "No data available for the selected date range",
@@ -47,7 +43,6 @@ async def predict(request: PredictionRequest):
                 "status": "error"
             }
         
-        # If dates are partially outside range, adjust them and warn
         date_adjusted = False
         original_start = start_date
         original_end = end_date
@@ -67,7 +62,6 @@ async def predict(request: PredictionRequest):
         if df is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
         
-        # Preprocess data
         processed_df, feature_columns = preprocess_data(df, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         if processed_df.empty:
@@ -79,13 +73,11 @@ async def predict(request: PredictionRequest):
                 "status": "error"
             }
         
-        # Get predictions based on the requested model
         if request.model == "xgboost":
             result = predict_xgboost(processed_df, feature_columns, request.look_back_window)
-        else:  # ensemble (defaulting to xgboost if ensemble is not available)
+        else: 
             result = predict_ensemble(processed_df, feature_columns, request.look_back_window)
             
-        # Add a warning if dates were adjusted
         if date_adjusted:
             result["date_range_adjusted"] = True
             result["original_requested_range"] = f"{original_start.strftime('%Y-%m-%d')} to {original_end.strftime('%Y-%m-%d')}"
@@ -100,7 +92,6 @@ async def predict(request: PredictionRequest):
         print(f"Prediction error: {str(e)}")
         print(traceback.format_exc())
         
-        # Return a structured error response rather than throwing an exception
         return {
             "error": f"Prediction error: {str(e)}",
             "status": "error",
@@ -143,22 +134,14 @@ def predict_ensemble(df, feature_columns, look_back_window):
     Generate predictions using the ensemble model (XGBoost + weights).
     """
     try:
-        # Get XGBoost predictions
         xgb_result = predict_xgboost(df, feature_columns, look_back_window)
         xgb_preds = pd.Series(xgb_result["forecast"])
-        
-        # Since we don't have LSTM with Python 3.12, we'll simulate ensemble with weights
-        # Get ensemble weights
+      
         weights = model_service.get_ensemble_weights()
-        
-        # Create ensemble predictions - adapt the weights
-        # We're using only XGBoost predictions, so we adjust the formula:
-        # Original: ensemble_preds = weights[0] * xgb_preds + weights[1] * lstm_preds
-        # Adjusted: ensemble_preds = (weights[0] + weights[1] * 0.9) * xgb_preds 
+
         adjusted_weight = weights[0] + (weights[1] * 0.9)
         ensemble_preds = xgb_preds * adjusted_weight
         
-        # Format the results
         result = {
             "model": "ensemble",
             "forecast": ensemble_preds.tolist(),
